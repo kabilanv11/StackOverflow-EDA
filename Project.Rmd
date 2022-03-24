@@ -1,0 +1,979 @@
+---
+title: "R Notebook"
+output:
+  html_notebook: default
+  html_document:
+    df_print: paged
+  word_document: default
+always_allow_html: yes
+---
+
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(highcharter)
+library(plotly)
+library(viridis)
+library(wesanderson)
+library(plotly)
+library(countrycode)
+library(visNetwork)
+library(randomcoloR)
+```
+
+```{r}
+survey <- read.csv("F:\\DataViz\\Project\\survey_results_public.csv")
+schema <- read.csv("F:\\DataViz\\Project\\survey_results_schema.csv")
+```
+
+The datasets have been imported.
+survey represents the results of the survey
+schema represents the questions asked during the survey.
+
+Before exploring the results of the survey, let us take a look at the questions asked during the survey.
+
+```{r}
+kable(schema)
+```
+
+```{r}
+glimpse(survey)
+```
+
+From the glimpse, we can see that there are some null values in some questions. This is due to the fact that most of the questions are optional in the survey. For the sake of exploration of this dataset, we will not be considering null values but it would be interesting to explore why a few questions have been answered null by the respondents.
+
+```{r}
+
+```
+
+
+Part I : General exploration of survey results
+
+Let's see which countries have the maximum respondents of the survey.
+
+```{r}
+survey %>% 
+  group_by(Country) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(20) %>%
+  hchart('treemap',hcaes(x=Country, value=n, color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=plasma(10))) %>%
+  hc_title(text="Top 20 Countries of respondents of survey")
+```
+As we can see from the above tree map, the country with the maximum number of respondents come from United States with India at second position while Germany, United Kingdom and Canada make up the top 5. 
+Let us also take a look at the percentage distribution of respondents
+
+```{r}
+size=nrow(survey)
+survey %>% 
+  group_by(Country) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(20) %>%
+  hchart('bar',hcaes(x=Country, y=round((n/size)*100,2))) %>%
+  hc_colorAxis(stops=color_stops(colors=plasma(10))) %>%
+  hc_title(text="Top 20 Countries of respondents of survey") %>%
+  hc_yAxis(title=list(text="Percentage of respondents"),labels = list(format = "{value}%")) %>%
+  hc_add_theme(hc_theme_tufte())
+```
+
+From the bar chart above, we can see that :
+20.54% of respondents are from the United States
+13.88% of respondents are from India
+Germany(6.53%),United Kingdom(6.29%) and Canada(3.43%) have the next 3 highest respondents.
+
+```{r}
+survey %>%
+  group_by(Country) %>%
+  count() -> country
+  country$Country <- as.character(country$Country)
+  country[country=="United States"] <- "United States of America"
+  country[country=="Russian Federation"] <- "Russia"
+  highchart() %>%
+    hc_add_series_map(worldgeojson,country,value='n',joinBy=c('name','Country')) %>%
+    hc_colorAxis(stops=color_stops(colors=viridis(10))) %>%
+    hc_title(text="Countries by no. of respondents") %>%
+    hc_add_theme(hc_theme_tufte())
+    
+```
+The above map is a better visualization of all the respondents by country.
+
+Now, let us look at how many respondents take up coding as a hobby.
+
+```{r}
+survey %>%
+  group_by(Hobby) %>%
+  count() %>%
+  plot_ly(type="pie",
+          labels=~Hobby,
+          values=~n,
+          textposition="inside",
+          textinfo='label+percent+value',
+          showlegend=FALSE,
+          marker=list(colors = viridis(2))
+  )%>%
+          layout(title="Is coding a hobby for respondents?")
+  
+```
+From the above piechart, we can see that more than 80% of the respondents take up coding as a hobby.
+
+```{r}
+survey %>%
+  group_by(OpenSource) %>%
+  count() %>%
+  plot_ly(type="pie",
+          labels=~OpenSource,
+          values=~n,
+          textposition="inside",
+          textinfo='label+percent+value',
+          showlegend=FALSE,
+          marker=list(colors = viridis(2))
+  )%>%
+          layout(title="Do respondents contribute to OpenSource Projets?")
+```
+
+From the above piechart, we can see that around 56% of respondents contribute to open source projects.
+
+Let's take a look at the gender of respondents.
+
+```{r}
+  S <- sum(is.na(survey$Gender))
+  S
+  round((S/size)*100,2)
+```
+We see that almost 34386(34.78%) respondents have not disclosed their gender in the survey. It would be interesting to know the reason behind this.
+
+```{r}
+survey %>% 
+  filter(!is.na(Gender)) %>%
+  group_by(Gender) %>%
+  count() %>%
+  plot_ly(type="pie",
+          labels=~Gender,
+          values=~n,
+          textposition="inside",
+          textinfo='label+percent',
+          showlegend=FALSE,
+          marker=list(colors = viridis(10))
+  ) %>%
+  layout(title="Gender of respondents")
+```
+The results are very shocking. We can see that 92.2% respondents who gave their gender are male, 6.24% of the respondents are female while the rest are transgender, non-binary or gender non-conforming. The results maybe misleading due to the fact that 34.78% of the respondents have not disclosed their gender. The reasons for this is not known, but the above chart shows us that there exists a huge gender gap in the StackOverflow Community.
+Now, let's take a look at whether the respondents are students and their current employment status.
+
+```{r}
+survey %>%
+  filter(!is.na(Student)) %>%
+  group_by(Student)%>%
+  count() %>%
+  hchart("pie",hcaes(x=Student,y=round((n/size)*100,2))) %>%
+  hc_add_theme(hc_theme_ffx()) %>%
+  hc_title(text="Are the respondents students?",align="center",style = list(fontWeight="bold", fontSize="30px"))
+```
+From the above pie chart, we can see that more that 71.21% of the respondents are not students, 18.61% are full time students while 6.18 are part-time students.
+
+```{r}
+survey %>%
+  filter(!is.na(Employment)) %>%
+  group_by(Employment)%>%
+  count() %>%
+  hchart("pie",hcaes(x=Employment,y=round((n/size)*100,2))) %>%
+  hc_add_theme(hc_theme_ffx()) %>%
+  hc_title(text="Employment status of the respondents",align="center",style = list(fontWeight="bold", fontSize="30px"))
+```
+From, the above pie chart, we can see that 71.31% are employed full time, 5.44% are employed part time, 9.39% are self-employed or freelancers while 20.05% are not employed. It is refreshing to see that full time employees take time to contribute to the StackOverflow Community.
+
+Now, let us take a look at the education of the respondents.
+
+```{r}
+survey %>%
+  filter(!is.na(FormalEducation)) %>%
+  group_by(FormalEducation) %>%
+  count() %>%
+  hchart("bar",hcaes(x=FormalEducation,y=n)) %>%
+  hc_title(text="Highest Level of Formal Education of respondents",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="No of respondents",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(text="Highest Level of Fromal Education",style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_ft()) %>%
+  hc_colors("black")
+```
+We can see that majority of respondents have received a bachelor's degree or a master's degree. Only a very few students have not completed any formal education.
+
+Let's take a look at what the respondents have majored in during their undergraduation.
+
+```{r}
+S <- sum(is.na(survey$UndergradMajor))
+S
+round((S/size)*100,2)
+```
+As we can see above, around 20% of respondents have not disclosed their undergrad major. This can be explained by the fact that almost 20% of students have either not received an undergrad degree as they have only completed their schooling, haven't had any formal education or have studied in college without earning a degree. This can be seen in the previous barplot.
+
+```{r}
+survey %>%
+  filter(!is.na(UndergradMajor)) %>%
+  group_by(UndergradMajor) %>%
+  count() %>%
+  hchart("bar",hcaes(x=UndergradMajor,y=round((n/size)*100,2))) %>%
+  hc_title(text="Undergraduation Majors of respondents",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="Percent of respondents",style=list(fontWeight="bold")),labels = list(format = "{value}%")) %>%
+  hc_xAxis(title=list(text="Major",style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_ft()) %>%
+  hc_colors("purple") 
+```
+The results are obvious as about 50.92% of respondents have a major in Computer Science stream, 7.03% are from another engineering discipline, 6.58% are from the IT stream. 
+
+Now that we've generally explored a few responses from the survey, let us try to find a few relationships between these responses
+```{r}
+survey %>%
+  count(Hobby,OpenSource) %>%
+  hchart("column",hcaes(x=Hobby,y=n,group=OpenSource)) %>%
+  hc_title(text="Contribution to OpenSource Projects by Coding as a Hobby",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(style=list(fontWeight="bold")))
+```
+It's pretty clear that people who code as a hobby tend to contribute more to opensource projects.
+
+Let's first look at whether respondents code as a hobby and contribute to open source according to their student and employment status
+
+```{r}
+survey %>% 
+  filter(!is.na(Student)) %>%
+  count(Hobby,Student) %>%
+  hchart("bar",hcaes(x=Hobby,y=n,group=Student)) %>%
+  hc_title(text="Coding as a hobby by Student Status",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_darkunica())
+```
+It is good to see that more number of students are coding as a hobby rather that studying it for the sake of university.
+```{r}
+survey %>% 
+  filter(!is.na(Student)) %>%
+  count(OpenSource,Student) %>%
+  hchart("bar",hcaes(x=OpenSource,y=n,group=Student)) %>%
+  hc_title(text="Contribution to OpenSource Projects by Sudent Status",style=list(fontWeight="bold")) %>%
+  hc_xAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_yAxis(title=list(style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_darkunica())
+```
+It can be seen that most people who are not students contribute to open source projects, while full time students contribute to open source projects the least. This is worrying to see as contributing to open source projects may be a great way to learn for students.
+
+```{r}
+survey %>% 
+  filter(!is.na(Employment)) %>%
+  count(OpenSource,Employment) %>%
+  hchart("column",hcaes(x=Employment,y=n,group=OpenSource)) %>%
+  hc_title(text="Contribution to OpenSource Projects by Employment Status",style=list(fontWeight="bold")) %>%
+  hc_xAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_yAxis(title=list(style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_flat())
+```
+
+The results are pretty clear that respondents who are employed full time do not contribute more to Open Source Projects while Freelancers and Independent contractors tend to contribute more to Open Source Projects. However, the results are puzzling that respondents who are employed part time or not employed do not contribute more to Open Source Projects.
+
+Next, Let us take a look at the current Employment Status vs where respondents hope to be in five years.
+
+```{r}
+survey %>% 
+  filter(!is.na(Employment)) %>%
+  filter(!is.na(HopeFiveYears)) %>%
+  count(Employment,HopeFiveYears) %>%
+  hchart("bar",hcaes(x=HopeFiveYears,y=n,group=Employment)) %>%
+  hc_title(text="Current Employment vs Hope in Five Years",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(text="Hope in Five Years",style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_google())
+```
+
+Inferences from the above chart:
+  1. Most people who are currently employed full time or part time hope to either work in a different/more specialized role in five years or want to find their own company.
+  2. Most people who are self-employed or independent contractors hope to be a founder/co-founder of their own company or expect to be doing the same work in five years, which shows that people who are self-employed or independent contractors are more satisfied with their job.
+  3. It is surprising that people who are currently not looking for work hope to be working in five years. 
+  
+Let us look at the job-satisfaction according to current employment Status
+
+```{r}
+survey %>% 
+  filter(!is.na(Employment)) %>%
+  filter(!is.na(JobSatisfaction)) %>%
+  count(Employment,JobSatisfaction) %>%
+  hchart("area",hcaes(x=JobSatisfaction,y=n,group=Employment)) %>%
+  hc_title(text="Current Employment vs Job Satisfaction",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="No. of respondents",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(text="Job Satisfaction",style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_flat())
+```
+
+From the above area chart, we can see that majority of the respondents are either extremely or moderately satisfied with their jobs, while only a very little percentage of respondents are extremely dissatisfied with their job. 
+
+```{r}
+survey %>% 
+  filter(!is.na(HopeFiveYears)) %>%
+  filter(!is.na(JobSatisfaction)) %>%
+  count(HopeFiveYears,JobSatisfaction) %>%
+  hchart("heatmap",hcaes(x=JobSatisfaction,y=HopeFiveYears,value=n)) %>%
+  hc_title(text="Hope in Five Years vs Job Satisfaction",style=list(fontWeight="bold")) %>%
+  hc_yAxis(title=list(text="Hope in Five years",style=list(fontWeight="bold"))) %>%
+  hc_xAxis(title=list(text="Job Satisfaction",style=list(fontWeight="bold"))) %>%
+  hc_add_theme(hc_theme_google()) 
+```
+The above heat map shows us that most people who are currently satisfied with their jobs expect to be in a higher role or start their own companies.
+
+Part II: Developer Types, Years spent coding, Preferred Languages,IDEs, Frameworks and Company Size.
+
+Let's take a look at the type of Developers who took part in the survey
+```{r}
+survey %>%
+  filter(!is.na(DevType)) %>%
+  select(DevType)%>%
+  mutate(DevType=str_split(DevType,";")) %>%
+  unnest(DevType) %>%
+  group_by(DevType) %>%
+  count() %>%
+  arrange(desc(n))->t
+t$n<- round((t$n/size)*100,2)
+highchart() %>%
+  hc_add_series(t,type = "bar", hcaes(x ="DevType", y = "n"), dataLabels = list(enabled = TRUE)) %>%
+  hc_legend(enabled=FALSE) %>%
+  hc_title(text="Developer Types of Respondents") %>%
+  hc_xAxis(categories=t$DevType) %>% 
+  hc_yAxis(title=list(text="Percentage of Respondents")) %>%
+  hc_add_theme(hc_theme_tufte()) %>%
+  hc_colors("orange")
+```
+We can see that a staggering 53.92% of respondents are Back-end Developers and 44.87% of respondents are Full-Stack Developers, whereas Front-end developers are third most with 35.23%. While Data Scientists and Data analysts are considered the hottest prospect of jobs, it is a bit surprising to see that only 7.17% and 7.65% of them have taken the survey.
+
+Let's take a look at how many years the respondents have spent coding.
+
+```{r}
+survey %>%
+  filter(!is.na(YearsCoding)) %>%
+  group_by(YearsCoding) %>%
+  count() %>%
+  arrange(desc(n))->t
+highchart() %>%
+  hc_add_series(t,type = "column", hcaes(x ="YearsCoding", y = "n"), dataLabels = list(enabled = TRUE)) %>%
+  hc_legend(enabled=FALSE) %>%
+  hc_title(text="How many years have respondents spent coding?") %>%
+  hc_xAxis(title=list(text="Years"),categories=t$YearsCoding) %>% 
+  hc_yAxis(title=list(text="No. of respondents")) %>%
+  hc_add_theme(hc_theme_tufte()) %>%
+  hc_colors("blue")
+```
+Most of the respondents have spent coding for 3-5 years while the second and third-most are respondents who have spent coding for 6-8 years and 9-11 years. What is most surprising to see is that more than 8000 respondents(~9%) have coded for more than 20 years and still contribute to the StackOverflow Community.
+
+```{r}
+survey %>%
+  filter(!is.na(YearsCodingProf)) %>%
+  group_by(YearsCodingProf) %>%
+  count() %>%
+  arrange(desc(n))->t
+highchart() %>%
+  hc_add_series(t,type = "column", hcaes(x ="YearsCodingProf", y = "n"), dataLabels = list(enabled = TRUE)) %>%
+  hc_legend(enabled=FALSE) %>%
+  hc_title(text="How many years have respondents spent coding professionally?") %>%
+  hc_xAxis(title=list(text="Years"),categories=t$YearsCodingProf) %>% 
+  hc_yAxis(title=list(text="No. of respondents")) %>%
+  hc_add_theme(hc_theme_tufte()) %>%
+  hc_colors("blue")
+```
+
+While most respondents have coded for 3-5 years and 6-8 years as seen in the previous plot, a majority of them have coded professionally for only less than 5 years. This can indicate one of the following things:
+
+1. A lot of people of start coding during their college years and continue to code professionally.
+2. A lot of people start coding only when they get a job.
+Let us take a look at the following plot to understand more.
+
+```{r}
+survey %>%
+  count(YearsCoding,YearsCodingProf) %>%
+  hchart("heatmap",hcaes(x=YearsCoding,y=YearsCodingProf,value=n)) %>%
+  hc_title(text="Years Coded vs Years Coding Professionally") %>%
+  hc_xAxis(title=list(text="Years Coded")) %>% 
+  hc_yAxis(title=list(text="Years Coding Professionally"))
+```
+As we can see,
+1. Most people who have coded for 0-2 years have coded only professionally.
+2. Majority of people who have coded for 3-5 have also coded professionally for 3-5 years.
+3. A lot of people who have coded for 6-8 years have also coded professionally for 6-8 years.
+All of this indicates that a majority of people have only ever coded professionally which means they have begun coding only after getting or starting a job.
+
+We can also see the next majority of people who have coded for 3-5 years, 6-8 years and 9-11 years have coded professionally for 0-2 years,3-5 years and 6-8 years professionally. THis most probably indicates that respondents start coding while in college and start coding professionally immediately after graduation.
+
+Now, Let us take a look at the Languages, Frameworks and IDEs used by Developers.
+
+```{r}
+survey %>% 
+ filter(!is.na(LanguageWorkedWith)) %>%
+  select(LanguageWorkedWith) %>%
+  mutate(LanguageWorkedWith = str_split(LanguageWorkedWith, pattern = ";")) %>%
+  unnest(LanguageWorkedWith) %>%
+  group_by(LanguageWorkedWith) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+t$n <- round((t$n/size)*100,2)
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="LanguageWorkedWith",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("red") %>% 
+  hc_title(text = 'Langauages Developers Have Worked With') %>%
+  hc_xAxis(title=list(text="Language Worked With"),categories=t$LanguageWorkedWith) %>% 
+  hc_yAxis(title=list(text="Percentage"),labels = list(format = "{value}%"))
+```
+
+
+```{r}
+survey %>% 
+ filter(!is.na(LanguageWorkedWith)) %>%
+  select(LanguageWorkedWith) %>%
+  mutate(LanguageWorkedWith = str_split(LanguageWorkedWith, pattern = ";")) %>%
+  unnest(LanguageWorkedWith) %>%
+  group_by(LanguageWorkedWith) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  hchart("treemap",hcaes(x=LanguageWorkedWith,value=n,color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=viridis(10))) %>%
+  hc_title(text="Languages Developers Have Worked With")
+```
+
+
+Top Languages Developers have worked with:
+JavaScript : 55.32%
+HTML : 54.25%
+CSS : 51.57%
+SQL : 45.19%
+Java : 35.93%
+Bash/Shell : 31.53%
+Python : 30.71 %
+
+```{r}
+survey %>% 
+ filter(!is.na(LanguageDesireNextYear)) %>%
+  select(LanguageDesireNextYear) %>%
+  mutate(LanguageDesireNextYear = str_split(LanguageDesireNextYear, pattern = ";")) %>%
+  unnest(LanguageDesireNextYear) %>%
+  group_by(LanguageDesireNextYear) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+t$n <- round((t$n/size)*100,2)
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="LanguageDesireNextYear",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("blue") %>% 
+  hc_title(text = 'Langauages Developers Want to Work With') %>%
+  hc_xAxis(title=list(text="Language"),categories=t$LanguageDesireNextYear) %>% 
+  hc_yAxis(title=list(text="Percentage"),labels = list(format = "{value}%"))
+```
+
+
+```{r}
+survey %>% 
+ filter(!is.na(LanguageDesireNextYear)) %>%
+  select(LanguageDesireNextYear) %>%
+  mutate(LanguageDesireNextYear = str_split(LanguageDesireNextYear, pattern = ";")) %>%
+  unnest(LanguageDesireNextYear) %>%
+  group_by(LanguageDesireNextYear) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  hchart("treemap",hcaes(x=LanguageDesireNextYear,value=n,color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=viridis(10))) %>%
+  hc_title(text="Languages Developers Want to Work With")
+```
+
+Most of developers want to continue working with JavaScript, HTML and CSS, SQL and Bash/Shell.
+33.17% of Developers would like to work with Python.
+Languages that developers currently don't work with a lot but would like to work with are C++,C#,Kotlin,Swift.
+
+The tree maps give a better visualization of Languages Worked With by developers and Languages they desire to work with.
+
+Now, let us take a look at what languages people who have just begun coding learn.
+
+```{r}
+survey %>% 
+  filter(!is.na(LanguageWorkedWith)) %>%
+  filter(!is.na(YearsCoding), YearsCoding %in% c("0-2 years")) %>%
+  select(LanguageWorkedWith) %>%
+  mutate(LanguageWorkedWith = str_split(LanguageWorkedWith, pattern = ";")) %>%
+  unnest(LanguageWorkedWith) %>%
+  group_by(LanguageWorkedWith) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="LanguageWorkedWith",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("blue") %>% 
+  hc_title(text = 'Langauages Developers who have 0-2 years coding experience have worked with') %>%
+  hc_xAxis(title=list(text="Language"),categories=t$LanguageWorkedWith) %>% 
+  hc_yAxis(title=list(text="No. of respondents"))
+```
+
+This shows that a lot of people who have just begun coding start with HTML/CSS , JavaScript, SQL and Java.
+
+
+Let us now take a look at IDE Preferences of Developers.
+
+```{r}
+survey %>% 
+ filter(!is.na(IDE)) %>%
+  select(IDE) %>%
+  mutate(IDE = str_split(IDE, pattern = ";")) %>%
+  unnest(IDE) %>%
+  group_by(IDE) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+t$n <- round((t$n/size)*100,2)
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="IDE",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("orange") %>% 
+  hc_title(text = 'IDE Preferences of Developers') %>%
+  hc_xAxis(title=list(text="IDE"),categories=t$IDE) %>% 
+  hc_yAxis(title=list(text="Percentage"),labels = list(format = "{value}%"))
+```
+
+```{r}
+survey %>% 
+ filter(!is.na(IDE)) %>%
+  select(IDE) %>%
+  mutate(IDE = str_split(IDE, pattern = ";")) %>%
+  unnest(IDE) %>%
+  group_by(IDE) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  hchart("treemap",hcaes(x=IDE,value=n,color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=plasma(10))) %>%
+  hc_title(text="IDE Preferences of Developers")
+```
+
+Majority of Developers prefer Visual Studio Code, Visual Studio and Notepad++ while Sublime Text, Vim and IntelliJ remain popular options.
+
+```{r}
+survey %>% 
+ filter(!is.na(FrameworkWorkedWith)) %>%
+  select(FrameworkWorkedWith) %>%
+  mutate(FrameworkWorkedWith = str_split(FrameworkWorkedWith, pattern = ";")) %>%
+  unnest(FrameworkWorkedWith) %>%
+  group_by(FrameworkWorkedWith) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+t$n <- round((t$n/size)*100,2)
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="FrameworkWorkedWith",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("green") %>% 
+  hc_title(text = 'Framework Developers Have Worked With') %>%
+  hc_xAxis(title=list(text="Framework"),categories=t$FrameworkWorkedWith) %>% 
+  hc_yAxis(title=list(text="Percentage"),labels = list(format = "{value}%"))
+```
+
+```{r}
+survey %>% 
+ filter(!is.na(FrameworkWorkedWith)) %>%
+  select(FrameworkWorkedWith) %>%
+  mutate(FrameworkWorkedWith = str_split(FrameworkWorkedWith, pattern = ";")) %>%
+  unnest(FrameworkWorkedWith) %>%
+  group_by(FrameworkWorkedWith) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  hchart("treemap",hcaes(x=FrameworkWorkedWith,value=n,color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=inferno(10))) %>%
+  hc_title(text="Frameworks Developers Have Worked With")
+```
+
+Considering that most people have worked with JavaScript,HTML and CSS, Node.js, Angular and React are the most popular Frameworks developers have worked with as they are all related to web development.
+
+```{r}
+survey %>% 
+ filter(!is.na(FrameworkDesireNextYear)) %>%
+  select(FrameworkDesireNextYear) %>%
+  mutate(FrameworkDesireNextYear = str_split(FrameworkDesireNextYear, pattern = ";")) %>%
+  unnest(FrameworkDesireNextYear) %>%
+  group_by(FrameworkDesireNextYear) %>%
+  count() %>%
+  arrange(desc(n)) ->t
+t$n <- round((t$n/size)*100,2)
+highchart() %>%
+hc_add_series(t,type="bar",hcaes(x="FrameworkDesireNextYear",y="n"),dataLabels = list(enabled = TRUE)) %>% 
+  hc_legend(enabled=FALSE) %>%
+  hc_colors("green") %>% 
+  hc_title(text = 'Framework Developers Want to Work With') %>%
+  hc_xAxis(title=list(text="Framework"),categories=t$FrameworkDesireNextYear) %>% 
+  hc_yAxis(title=list(text="Percentage"),labels = list(format = "{value}%"))
+```
+
+```{r}
+survey %>% 
+ filter(!is.na(FrameworkDesireNextYear)) %>%
+  select(FrameworkDesireNextYear) %>%
+  mutate(FrameworkDesireNextYear = str_split(FrameworkDesireNextYear, pattern = ";")) %>%
+  unnest(FrameworkDesireNextYear) %>%
+  group_by(FrameworkDesireNextYear) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  hchart("treemap",hcaes(x=FrameworkDesireNextYear,value=n,color=n)) %>%
+  hc_colorAxis(stops=color_stops(colors=inferno(10))) %>%
+  hc_title(text="Frameworks Developers want to Work With")
+```
+
+Node.js still remains at the top, but more developers want to explore React and Angular. TensorFlow is the Framework that a lot of people haven't worked with yet, but would like to work with a lot. I believe this is due to increasing ML research and opportunities.
+
+```{r}
+survey %>% 
+ filter(!is.na(OperatingSystem)) %>%
+  select(OperatingSystem) %>%
+  mutate(OperatingSystem = str_split(OperatingSystem, pattern = ";")) %>%
+  unnest(OperatingSystem) %>%
+  group_by(OperatingSystem) %>%
+  count() %>%
+  plot_ly(type="pie",
+          labels=~OperatingSystem,
+          values=~n,
+          textposition="inside",
+          textinfo='label+percent+value',
+          showlegend=FALSE,
+          marker=list(colors = viridis(4))
+  )%>%
+          layout(title="Operating System Prefernce of Developers")
+```
+Windows still remains the popular Operating System Developers work with.
+
+Part III: Salary Analysis
+```{r,results='hide',fig.keep='all'}
+survey %>% 
+  filter(!is.na(Country)) %>%
+  filter(!is.na(ConvertedSalary)) %>%
+  group_by(Country) %>%
+  summarise(Median_salary=median(ConvertedSalary,na.rm = TRUE)) ->t
+code <- countrycode(t$Country, 'country.name', 'iso3c')
+t$iso3 <- code
+highchart() %>%
+    hc_add_series_map(worldgeojson, t, value = "Median_salary", joinBy = "iso3") %>%
+    hc_colorAxis(stops=color_stops(colors=wes_palette("Cavalcanti1", 10, type = "continuous"))) %>%
+    hc_title(text="Median Salary of Countries") %>%
+    hc_add_theme(hc_theme_google())
+
+    
+```
+
+```{r}
+survey %>%
+  filter(Employment %in% 'Employed full-time') %>%
+  ggplot() +
+  geom_histogram(aes(ConvertedSalary),fill = "chocolate2")  +
+  labs(x = "Annual Salary in USD", y = "Frequency",
+       title = " Distribution of Annual Salary in USD") + theme_test() -> sal
+sal
+```
+Note : Only the Salary of full time employees have been taken for the above distribution.
+```{r}
+survey %>%
+  filter(Employment %in% 'Employed full-time') %>%
+  ggplot() +
+  geom_histogram(aes(ConvertedSalary),fill = "chocolate4")  +
+  scale_x_log10() +
+  labs(x = "Log Annual Salary in USD", y = "Frequency",
+       title = " Distribution of Annual Salary in USD on Log Scale") + theme_test() -> sal
+sal
+```
+
+As we have seen in the beginning of the project, the most respondents have come from the following countries (Top 10) : United States, India, Germany, United Kingdom, Canada, Russia, France, Brazil, Poland, Australia (in order).
+
+Let us see the distribution  of people from these countries alone.
+
+```{r,results='hide',fig.keep='all'}
+survey %>% filter(Employment %in% 'Employed full-time') %>% 
+  group_by(Country) %>% 
+  count() %>% 
+  arrange(desc(n)) %>%
+  head(10) %>%
+  select(Country) %>% mutate(Country = factor(Country)) -> countries
+options(scipen=999)
+survey %>% filter(Employment %in% 'Employed full-time') %>% 
+  group_by(Country) %>% 
+  mutate(n = n()) %>% 
+  filter(n > 1355) %>% 
+  ungroup(Country) %>% 
+  ggplot() +
+  geom_violin(aes(Country,ConvertedSalary), fill= "deepskyblue4", color = "black") + theme_minimal()+
+  scale_x_discrete(limits = countries$Country) + 
+  coord_flip() +
+  scale_y_log10() +
+  labs(x = "Country", y = "Annual Salary in USD",
+       title = "Distribution of Annual Salary(USD) of Top 10 Countries of respondents") -> p
+ggplotly(p)
+```
+
+```{r}
+options(scipen=999)
+survey %>% filter(Employment %in% 'Employed full-time') %>% 
+  filter(Gender %in% c('Male','Female')) %>% 
+  group_by(Country) %>% 
+  mutate(n = n()) %>% 
+  ungroup(Country) %>% 
+  ggplot() +
+  geom_boxplot(aes(Country,ConvertedSalary, fill = Gender))  + theme_minimal() +
+  scale_fill_brewer(palette="Dark2") +
+  scale_x_discrete(limits = countries$Country) +
+  coord_flip() +
+  scale_y_log10() + 
+  labs(x = "Country", y = "Log of Annual Salary in USD",
+       title = "Annual Salary in USD - Male vs Female of Top 10 countires by respondent") 
+```
+```{r}
+survey%>%
+  select(DevType,ConvertedSalary,Age)%>%
+  filter(!is.na(DevType),!is.na(ConvertedSalary),!is.na(Age)) %>%
+  mutate(DevType=str_split(DevType,";"))%>%
+  unnest(DevType)%>%group_by(Age,DevType)%>%
+  summarise(avg_salary=round(median(ConvertedSalary),0))%>%
+  ungroup()%>%
+  hchart("spline",hcaes(x=Age,y=avg_salary,group=DevType)) %>%
+ hc_title(text="Median Salary by developer type and age") %>%
+  hc_xAxis(title=list(text="Age")) %>%
+  hc_yAxis(title=list(text="Median Salary in USD"))
+```
+
+```{r}
+survey%>%
+  select(DevType,ConvertedSalary)%>%
+  filter(!is.na(DevType),!is.na(ConvertedSalary))%>%
+  mutate(DevType=str_split(DevType,";"))%>%
+  unnest(DevType)%>%
+  group_by(DevType)%>%
+  summarise(avg_salary=round(median(ConvertedSalary),0))%>%
+  arrange(desc(avg_salary))%>%
+  ungroup()%>% arrange(desc(avg_salary)) %>%
+  hchart("lollipop",hcaes(x=DevType,y=avg_salary,group=DevType,size=avg_salary)) %>%
+  hc_legend(enabled=FALSE) %>%
+  hc_title(text="Median Salary by developer type") %>%
+  hc_xAxis(title=list(text="Developer Type")) %>%
+  hc_yAxis(title=list(text="Median Salary in USD"))
+```
+
+```{r}
+survey%>%
+  select(DevType,ConvertedSalary,YearsCodingProf)%>%
+  filter(!is.na(DevType),!is.na(ConvertedSalary),!is.na(YearsCodingProf))%>%
+  mutate(YearsCoding=parse_number(as.character(YearsCodingProf)))%>%
+  mutate(DevType=str_split(DevType,";"))%>%
+  unnest(DevType)%>%
+  group_by(DevType)%>%
+  summarise(avg_salary=round(median(ConvertedSalary),0),n=n(),avg_years=mean(YearsCoding))%>%
+  arrange(desc(n))%>%
+  ungroup() -> t
+hchart(t ,"bubble",hcaes(x=avg_years,y=avg_salary,group=DevType,size=n)) %>%
+  hc_title(text="Professional Coding Experience vs Average Salary by Developer Type") %>%
+  hc_xAxis(title=list(text="Average Professional Coding Experience in Years")) %>%
+  hc_yAxis(title=list(text="Median Salary in USD")) %>%
+  hc_legend(align = "right", layout = "vertical", verticalAlign = "top") %>%
+  hc_add_theme(hc_theme_google())
+```
+
+```{r}
+survey%>%
+  select(LanguageWorkedWith,ConvertedSalary)%>%
+  filter(!is.na(LanguageWorkedWith),!is.na(ConvertedSalary))%>%
+  mutate(LanguageWorkedWith=str_split(LanguageWorkedWith,";"))%>%
+  unnest(LanguageWorkedWith)%>%
+  group_by(LanguageWorkedWith)%>%
+  summarise(avg_salary=round(median(ConvertedSalary),0))%>%
+  arrange(desc(avg_salary))%>%
+  ungroup()%>% arrange(desc(avg_salary)) %>%
+  hchart("lollipop",hcaes(x=LanguageWorkedWith,y=avg_salary,group=LanguageWorkedWith,size=avg_salary)) %>%
+  hc_legend(enabled=FALSE) %>%
+  hc_title(text="Median Salary by Language Worked With") %>%
+  hc_xAxis(title=list(text="Language Worked With")) %>%
+  hc_yAxis(title=list(text="Median Salary in USD"))
+```
+
+```{r}
+survey%>%
+  select(LanguageWorkedWith,ConvertedSalary,YearsCodingProf)%>%
+  filter(!is.na(LanguageWorkedWith),!is.na(ConvertedSalary),!is.na(YearsCodingProf))%>%
+  mutate(YearsCoding=parse_number(as.character(YearsCodingProf)))%>%
+  mutate(LanguageWorkedWith=str_split(LanguageWorkedWith,";"))%>%
+  unnest(LanguageWorkedWith)%>%
+  group_by(LanguageWorkedWith)%>%
+  summarise(avg_salary=round(median(ConvertedSalary),0),n=n(),avg_years=mean(YearsCoding))%>%
+  arrange(desc(n))%>%
+  ungroup() -> t
+hchart(t ,"bubble",hcaes(x=avg_years,y=avg_salary,group=LanguageWorkedWith,size=n)) %>%
+  hc_title(text="Professional Coding Experience vs Average Salary by Language Worked With") %>%
+  hc_xAxis(title=list(text="Average Professional Coding Experience in Years")) %>%
+  hc_yAxis(title=list(text="Median Salary in USD")) %>%
+  hc_legend(align = "right", layout = "vertical", verticalAlign = "top") %>%
+  hc_add_theme(hc_theme_google())
+```
+
+Part IV: Network Analysis
+
+In a Network plot for X,
+Each node denotes the different X values and the size of node denotes the number of respondents for X.
+Each connecting edge between any two nodes denotes that the respondents chose both X values. And, the width of the edge denotes the number of users that chose both X values.
+Let us look at the network plots for Developer Types, Languages developers want to work with and IDEs they use.
+
+```{r,results='hide',fig.keep='all'}
+survey %>% select(Respondent,DevType) -> t1
+t1 %>% 
+  mutate(DevType = strsplit(as.character(DevType), ";"))%>% 
+  unnest(DevType) -> t2
+         
+t2 %>%
+  group_by(Respondent)%>%
+  filter(n()>=2)%>%
+  do(data.frame(t(combn((.)[["DevType"]], 2)), stringsAsFactors=FALSE))%>% 
+  ungroup()%>%
+  rename(source = X1, target = X2)%>%
+  select(-Respondent) -> t2_edges
+
+t2_edges %>% 
+  group_by(source,target)%>% 
+  summarise(weight=n()) ->t2_edges
+
+
+names(t2_edges) <- c("from","to","weight")
+t2_edges$weight <- t2_edges$weight/1500
+
+t2_edges$width <- 1+t2_edges$weight
+t2_edges$smooth <- FALSE 
+t2_edges$shadow <- FALSE
+
+t2_nodes <- t2 %>% filter(!is.na(DevType)) %>% group_by(DevType) %>% summarise(n = n()/750) %>% arrange(desc(n))
+names(t2_nodes) <- c("id","size")
+
+n <- nrow(t2_nodes)
+palette <- distinctColorPalette(n)
+
+t2_nodes$shape <- "dot"  
+t2_nodes$shadow <- TRUE
+t2_nodes$title <- t2_nodes$id
+t2_nodes$label <- t2_nodes$id
+t2_nodes$size <- t2_nodes$size
+t2_nodes$borderWidth <- 2
+
+t2_nodes$color.background <- palette[as.numeric(as.factor(t2_nodes$id))]
+t2_nodes$color.border <- "black"
+t2_nodes$color.highlight.background <- "gold"
+t2_nodes$color.highlight.border <- "gold"
+
+visNetwork(t2_nodes, t2_edges,height = "1000px", width="100%") %>% visIgraphLayout(layout = "layout_with_lgl") %>% 
+  visEdges(shadow = TRUE,
+           color = list(color = "gray", highlight = "darkorange")) %>% visLegend()
+```
+
+From the network plot above, it can be seen that, it can be seen that the relationships with the highest correlation are
+Back-end developer — Full-stack developer
+Front-end developer — Full-stack developer
+Back-end developer — Front-end developer
+Back-end developer — Desktop or enterprise application developer
+
+```{r,results='hide',fig.keep='all'}
+survey %>% select(Respondent,LanguageDesireNextYear) -> t1
+t1 %>% 
+  mutate(LanguageDesireNextYear = strsplit(as.character(LanguageDesireNextYear), ";"))%>% 
+  unnest(LanguageDesireNextYear) -> t2
+         
+t2 %>%
+  group_by(Respondent)%>%
+  filter(n()>=2)%>%
+  do(data.frame(t(combn((.)[["LanguageDesireNextYear"]], 2)), stringsAsFactors=FALSE))%>% 
+  ungroup()%>%
+  rename(source = X1, target = X2)%>%
+  select(-Respondent) -> t2_edges
+
+t2_edges %>% 
+  group_by(source,target)%>% 
+  summarise(weight=n()) ->t2_edges
+
+
+names(t2_edges) <- c("from","to","weight")
+t2_edges$weight <- t2_edges$weight/1500
+
+t2_edges$width <- 1+t2_edges$weight
+t2_edges$smooth <- FALSE 
+t2_edges$shadow <- FALSE
+
+t2_nodes <- t2 %>% filter(!is.na(LanguageDesireNextYear)) %>% group_by(LanguageDesireNextYear) %>% summarise(n = n()/750) %>% arrange(desc(n))
+names(t2_nodes) <- c("id","size")
+
+n <- nrow(t2_nodes)
+palette <- distinctColorPalette(n)
+
+t2_nodes$shape <- "circle"  
+t2_nodes$shadow <- TRUE
+t2_nodes$title <- t2_nodes$id
+t2_nodes$label <- t2_nodes$id
+t2_nodes$size <- t2_nodes$size
+t2_nodes$borderWidth <- 2
+
+t2_nodes$color.background <- palette[as.numeric(as.factor(t2_nodes$id))]
+t2_nodes$color.border <- "black"
+t2_nodes$color.highlight.background <- "purple"
+t2_nodes$color.highlight.border <- "purple"
+
+visNetwork(t2_nodes, t2_edges,height = "1200px", width="100%") %>% visIgraphLayout(layout = "layout_with_lgl") %>% 
+  visEdges(shadow = TRUE,
+           color = list(color = "gray", highlight = "magenta")) %>% visLegend()
+```
+The relationships with highest correlation are:
+HTML — CSS
+HTML — JavaScript
+CSS — JavaScript
+HTML — SQL
+SQL — JavaScript
+CSS — SQL
+Python — SQL
+Python — JavaScript
+
+```{r,results='hide',fig.keep='all'}
+survey %>% select(Respondent,IDE) -> t1
+t1 %>% 
+  mutate(IDE = strsplit(as.character(IDE), ";"))%>% 
+  unnest(IDE) -> t2
+         
+t2 %>%
+  group_by(Respondent)%>%
+  filter(n()>=2)%>%
+  do(data.frame(t(combn((.)[["IDE"]], 2)), stringsAsFactors=FALSE))%>% 
+  ungroup()%>%
+  rename(source = X1, target = X2)%>%
+  select(-Respondent) ->t2_edges
+
+t2_edges %>% 
+  group_by(source,target)%>% 
+  summarise(weight=n()) ->t2_edges
+
+
+names(t2_edges) <- c("from","to","weight")
+t2_edges$weight <- t2_edges$weight/1500
+
+t2_edges$width <- 1+t2_edges$weight
+t2_edges$smooth <- FALSE 
+t2_edges$shadow <- FALSE
+
+t2_nodes <- t2 %>% filter(!is.na(IDE)) %>% group_by(IDE) %>% summarise(n = n()/750) %>% arrange(desc(n))
+names(t2_nodes) <- c("id","size")
+
+n <- nrow(t2_nodes)
+palette <- distinctColorPalette(n)
+
+t2_nodes$shape <- "triangle"  
+t2_nodes$shadow <- TRUE
+t2_nodes$title <- t2_nodes$id
+t2_nodes$label <- t2_nodes$id
+t2_nodes$size <- t2_nodes$size
+t2_nodes$borderWidth <- 2
+
+t2_nodes$color.background <- palette[as.numeric(as.factor(t2_nodes$id))]
+t2_nodes$color.border <- "black"
+t2_nodes$color.highlight.background <- "chocolate"
+t2_nodes$color.highlight.border <- "chocolate"
+
+visNetwork(t2_nodes, t2_edges,height = "1000px", width="100%") %>% visIgraphLayout(layout = "layout_with_lgl") %>% 
+  visEdges(shadow = TRUE,
+           color = list(color = "gray", highlight = "brown")) %>% visLegend()
+```
+```
+
